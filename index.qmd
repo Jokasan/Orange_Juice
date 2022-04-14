@@ -1,0 +1,193 @@
+---
+title: "Exploring Orange Juice Sales - Dominick's Grocery Store"
+author: "Nils Indreiten"
+format:
+  html:
+    theme: spacelab
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+# Overview
+
+This report is concerned with the sales data for orange juice from the
+Grocery Store Dominick's, a Chicago store chain. The data were collected
+in the 1990's and is available from the [Kilts Center](https://www.chicagobooth.edu/research/kilts/datasets/dominicks) at The University
+of Chicago's Booth School of Business]. The data contains variables about weekly prices
+as well as sales for three respective brands, and a variable to denote whether the
+brand was advertised that week. Lets take a look at the data:
+
+```{r echo=FALSE}
+# Load useful packages:
+pacman::p_load(tidyverse,simplevis,tidymodels, vcd)
+# Read in data:
+OJ <- readr::read_csv("oj.csv")
+OJ |> 
+  skimr::skim()
+```
+
+It might be interesting to visualize the price broken down by brand
+
+```{r}
+# Store the log conversions in new df for easier plotting
+ OJ |> 
+  mutate(price=log(price),
+         move= log(sales)) ->OJ2
+# Log price
+gg_boxplot(OJ2,
+    x_var=brand,
+    y_var= price,
+    pal = "indianred3",
+    y_title = "Log(price)"
+  )
+```
+
+Equally the log sales by log price for each brand :
+```{r}
+# Log salesXprice
+gg_point_col(
+  OJ2,
+  x_var = price,
+  y_var = move,
+  col_var = brand,
+  pal =  c("#da3490", "#9089fa", "#47e26f"),
+  y_title= "Log(sales)")
+```
+
+# Modelling
+
+Lets create a simple regression model sales as a function of price and
+brand:
+
+```{r}
+reg <- glm(log(sales)~brand+log(price), data=OJ)
+reg |> 
+  tidy()
+# visualise:
+OJ2 |> ggplot(aes(price,move, group=brand,color=brand))+
+  geom_point(color="black")+
+  stat_smooth(method="lm")+
+  ylab("log(price)")+
+  theme_minimal()
+```
+
+The first thing to note is that $\beta$=-3.1 for the log(price) effect.
+In other words sales drop by around 3% for every 1% increase in price.
+The second is the effect sizes for the brand type, i.e. a dummy variable
+is created to account for the effect of the respective brand. However,
+it would be interesting to see the interaction effect between brand and
+log price. This can be defined using the \* term in the input formula:
+
+```{r}
+interaction_reg_model <- lm(log(sales)~ log(price)*brand, data =OJ)
+beta <- coef(interaction_reg_model)
+interaction_reg_model |> 
+  tidy()
+```
+
+The interaction term can be added to the slope to get the elasticities
+for the other brands. These are the terms containing the
+log(price):brand interaction:
+
+```{r}
+interaction_reg_model |> 
+  tidy() |> 
+  filter(str_detect(term, 'log'))
+```
+
+It now becomes evident that the Tropicana customers are less sensitive
+than the others (-2.7) compared to -3.3 (log(price)). Take this in
+contrast to the -3.1 price sensitivity in the previous model. In other
+words the -3.1 price sensitivity was an average across the two distinct
+populations of consumers.
+
+Our data set contains some information regarding whether the brand was
+promoted in an in-door display promo or a flier ad during the week the
+sales data was recorded. This allows for the exploration of the
+relationship between price and sales. The ads may positively impact
+sales at all price points, therefore impacting price sensitivity, and
+both of these effects can occur for each of the respective brands. This
+can be expressed in terms of a three way interaction between price,
+brand, and feat. This interaction model is defined below:
+
+```{r}
+ojreg <- glm(log(sales)~log(price)*brand*feat, data = OJ)
+ojreg |> 
+  tidy()
+```
+
+The brand specific elasticities are now the following:
+
+```{r echo=FALSE}
+beta <- coef(ojreg)
+elasticities <- tribble(
+  ~Advertised, ~Dominicks,~MinuteMaid,~Tropicana,
+  "Not Featured", -2.8,-2.0,-2.0,
+  "Featured",-3.2,-3.6,-3.5)
+elasticities |> knitr::kable()
+```
+
+This reveals that being featured leads to more price sensitivity. The
+Minute Maid and Tropicana elasticities drop from -2.0 to below -3.5 when
+features. In contrast, Dominick's feature results in a drop from -2.8 to
+-3.2. One possible explanation is that being featured can increase
+market reach beyond brand loyalists, i.e. to include consumers that are
+more price sensitive than those making repeat purchases on a weekly
+basis. Alternatively, another explanation to why this might be happening
+might be due to the fact that featured products are often also
+discounted, this alludes that the demand curve may be nonlinear,the
+average consumer is more price sensitive at lower price points. However,
+the reality likely is that there is a combination of these effects. The
+keen observer might have noticed that relative to the model including
+the interaction between price and brand, in the three way interaction
+model, Minute Maid and Tropicana have almost identical elasticities.
+This is due to the fact that the one way interaction model, was
+confounding the effects of being featured and the brands.
+
+```{r echo=FALSE}
+OJ |> 
+  mutate(feat = factor(OJ$feat,labels = c("No Ads","Ads")))->OJ
+tbl <- xtabs(~brand + feat, OJ)
+mosaic(tbl,
+       shade = TRUE)
+```
+
+The figure above shows that Minute Maid was featured more relative to
+Tropicana. Given that being featured leads to more price sensitivity,
+Minute Maid will appear more price sensitive when not accounting for the
+effect of being featured.
+
+# Bootstrapping 
+
+It might be interesting to get a confidence intervals for the
+coefficients and increase the certainty of their effect sizes using
+bootstrap:
+
+```{r}
+doParallel::registerDoParallel()
+reg_intervals(log(sales)~log(price)*brand*feat, 
+              data = OJ,
+              times=1000) -> bootstrapped_model
+```
+
+We now have the boostrapped estimated effect size and an upper and lower
+confidence interval:
+
+```{r}
+bootstrapped_model
+```
+
+We can visualize the bootstrapped effect size for each and their
+respective confidence intervals:
+
+```{r}
+ gg_hpointrange(bootstrapped_model,
+                    xmiddle_var = .estimate,
+                    xmin_var = .lower,
+                    xmax_var = .upper,
+                    y_var = term,
+                    x_title = "Effect size",
+                    y_title = "",
+                    title = "Boostrapped Interaction Model Terms Confidence Intervals")
+```
