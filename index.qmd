@@ -44,6 +44,7 @@ gg_boxplot(OJ2,
 ```
 
 Equally the log sales by log price for each brand :
+
 ```{r}
 # Log salesXprice
 gg_point_col(
@@ -52,7 +53,8 @@ gg_point_col(
   y_var = move,
   col_var = brand,
   pal =  c("#da3490", "#9089fa", "#47e26f"),
-  y_title= "Log(sales)")
+  y_title= "Log(sales)",
+  x_title = "Log(price)")
 ```
 
 # Modelling
@@ -68,7 +70,8 @@ reg |>
 OJ2 |> ggplot(aes(price,move, group=brand,color=brand))+
   geom_point(color="black")+
   stat_smooth(method="lm")+
-  ylab("log(price)")+
+  ylab("log(sales)")+
+  xlab("log(price)")+
   theme_minimal()
 ```
 
@@ -77,7 +80,7 @@ In other words sales drop by around 3% for every 1% increase in price.
 The second is the effect sizes for the brand type, i.e. a dummy variable
 is created to account for the effect of the respective brand. However,
 it would be interesting to see the interaction effect between brand and
-log price. This can be defined using the \* term in the input formula:
+log price. This can be defined using the * term in the input formula:
 
 ```{r}
 interaction_reg_model <- lm(log(sales)~ log(price)*brand, data =OJ)
