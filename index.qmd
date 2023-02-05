@@ -1,12 +1,12 @@
 ---
 title: "Exploring Orange Juice Sales - Dominick's Grocery Store"
 author: "Nils Indreiten"
-format:
+format: 
   html:
-    theme: spacelab
-editor_options: 
-  markdown: 
-    wrap: 72
+    theme: lumen
+    code-fold: true
+    code-summary: "Show the code"
+    toc: true
 ---
 
 # Overview
@@ -14,13 +14,14 @@ editor_options:
 This report is concerned with the sales data for orange juice from the
 Grocery Store Dominick's, a Chicago store chain. The data were collected
 in the 1990's and is available from the [Kilts Center](https://www.chicagobooth.edu/research/kilts/datasets/dominicks) at The University
-of Chicago's Booth School of Business]. The data contains variables about weekly prices
+of Chicago's Booth School of Business. The data contains variables about weekly prices
 as well as sales for three respective brands, and a variable to denote whether the
 brand was advertised that week. Lets take a look at the data:
 
-```{r echo=FALSE}
+```{r, echo=FALSE, message=FALSE}
 # Load useful packages:
-pacman::p_load(tidyverse,simplevis,tidymodels, vcd)
+pacman::p_load(tidyverse,tidymodels, vcd)
+ pal =  c("#da3490", "#9089fa", "#47e26f")
 # Read in data:
 OJ <- readr::read_csv("oj.csv")
 OJ |> 
@@ -35,29 +36,30 @@ It might be interesting to visualize the price broken down by brand
   mutate(price=log(price),
          move= log(sales)) ->OJ2
 # Log price
-gg_boxplot(OJ2,
-    x_var=brand,
-    y_var= price,
-    pal = "indianred3",
-    y_title = "Log(price)"
-  )
+OJ2 %>% 
+  ggplot(aes(brand,price)) +
+  geom_boxplot(fill="indianred") +
+  geom_hline(yintercept = 0)+
+  labs(y = "Log(price)")+
+  theme_light()
+
 ```
 
 Equally the log sales by log price for each brand :
 
 ```{r}
 # Log salesXprice
-gg_point_col(
-  OJ2,
-  x_var = price,
-  y_var = move,
-  col_var = brand,
-  pal =  c("#da3490", "#9089fa", "#47e26f"),
-  y_title= "Log(sales)",
-  x_title = "Log(price)")
+OJ2 %>% 
+  ggplot(aes(price,move, color=brand))+
+  geom_jitter()+
+  scale_color_manual(values = pal)+
+  labs(x="Log(price)",
+       y="Log(sales)",
+       color="Brand")+
+  theme_light()
 ```
 
-# Modelling
+# Modeling
 
 Lets create a simple regression model sales as a function of price and
 brand:
@@ -174,7 +176,7 @@ reg_intervals(log(sales)~log(price)*brand*feat,
               times=1000) -> bootstrapped_model
 ```
 
-We now have the boostrapped estimated effect size and an upper and lower
+We now have the bootstrapped estimated effect size and an upper and lower
 confidence interval:
 
 ```{r}
@@ -185,12 +187,27 @@ We can visualize the bootstrapped effect size for each and their
 respective confidence intervals:
 
 ```{r}
- gg_hpointrange(bootstrapped_model,
-                    xmiddle_var = .estimate,
-                    xmin_var = .lower,
-                    xmax_var = .upper,
-                    y_var = term,
-                    x_title = "Effect size",
-                    y_title = "",
-                    title = "Boostrapped Interaction Model Terms Confidence Intervals")
+bootstrapped_model %>% 
+  ggplot(aes(.estimate, term,fill="midnightblue"))+
+  geom_errorbar(linewidth=1.4,alpha = 0.7,
+                aes(xmin=.lower, xmax=.upper))+
+  geom_point()+
+  theme_light()+
+    theme(legend.position = "none")+
+  labs(title = "Boostrapped Model Terms Confidence Intervals")
+
 ```
+
+
+# Conclusion 
+
+This report revisits data from the University of Chicago's Booth School of Business.
+It explores data relating to orange juice brands, with the aim of establishing 
+price elasticity and their effect on sales. Furthermore, the analysis uncovers interaction
+effects between price, brand, and being included in advertising/promotion. Finally,
+bootstrapped confidence intervals were developed for additional robustness.
+
+
+
+
+
